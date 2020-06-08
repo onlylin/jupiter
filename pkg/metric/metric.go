@@ -22,25 +22,67 @@ import (
 )
 
 var (
-	// TypeServerHttp ...
-	TypeServerHttp = "http"
-	// TypeServerUnary ...
-	TypeServerUnary = "unary"
-	// TypeServerStream ...
-	TypeServerStream = "stream"
-	// TypeLibRocketMq ...
-	TypeLibRocketMq = "rocketMq"
+	TypeHTTP       = "http"
+	TypeGRPCUnary  = "unary"
+	TypeGRPCStream = "stream"
+	TypeRedis      = "redis"
+	TypeRocketMQ   = "rocketmq"
+
+	// CodeJob
+	CodeJobSuccess = "ok"
+	CodeJobFail    = "fail"
+	CodeJobReentry = "reentry"
+
+	// CodeCache
+	CodeCacheMiss = "miss"
+	CodeCacheHit  = "hit"
+
+	// Namespace
+	DefaultNamespace = "jupiter"
 )
 
 var (
-	// ServerHandleHistogram 指标: 服务类型，调用方法，客户端标识，返回的状态码
-	ServerMetricsHandler = NewServerMetrics()
+	ServerHandleCounter = CounterVecOpts{
+		Namespace: DefaultNamespace,
+		Name:      "server_handle_total",
+		Labels:    []string{"type", "method", "peer", "code"},
+	}.Build()
 
-	// ClientHandleHistogram 指标: 客户端类型，客户端名称，调用方法，目标，返回的状态码
-	ClientMetricsHandler = NewClientMetrics()
+	ServerHandleHistogram = HistogramVecOpts{
+		Namespace: DefaultNamespace,
+		Name:      "server_handle_seconds",
+		Labels:    []string{"type", "method", "peer"},
+	}.Build()
 
-	// WorkerHandleHistogram 指标: 类型，任务名，执行状态码
-	WorkerMetricsHandler = NewWorkerMetrics()
+	ClientHandleCounter = CounterVecOpts{
+		Namespace: DefaultNamespace,
+		Name:      "client_handle_total",
+		Labels:    []string{"type", "name", "method", "peer", "code"},
+	}.Build()
+
+	ClientHandleHistogram = HistogramVecOpts{
+		Namespace: DefaultNamespace,
+		Name:      "client_handle_seconds",
+		Labels:    []string{"type", "name", "method", "peer"},
+	}.Build()
+
+	JobHandleCounter = CounterVecOpts{
+		Namespace: DefaultNamespace,
+		Name:      "job_handle_total",
+		Labels:    []string{"type", "name", "code"},
+	}.Build()
+
+	JobHandleHistogram = HistogramVecOpts{
+		Namespace: DefaultNamespace,
+		Name:      "job_handle_seconds",
+		Labels:    []string{"type", "name"},
+	}.Build()
+
+	BuildInfoGauge = GaugeVecOpts{
+		Namespace: DefaultNamespace,
+		Name:      "build_info",
+		Labels:    []string{"name", "id", "env", "zone", "region", "version"},
+	}
 )
 
 func init() {

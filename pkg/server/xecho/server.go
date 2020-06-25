@@ -16,24 +16,34 @@ package xecho
 
 import (
 	"context"
+	"net/http"
 	"os"
 
 	"github.com/douyu/jupiter/pkg"
+	"github.com/douyu/jupiter/pkg/ecode"
 	"github.com/douyu/jupiter/pkg/server"
 	"github.com/douyu/jupiter/pkg/xlog"
 	"github.com/labstack/echo/v4"
+	"net"
 )
 
 // Server ...
 type Server struct {
 	*echo.Echo
-	config *Config
+	config   *Config
+	listener net.Listener
 }
 
 func newServer(config *Config) *Server {
+	listener, err := net.Listen("tcp", config.Address())
+	if err != nil {
+		config.logger.Panic("new xecho server err", xlog.FieldErrKind(ecode.ErrKindListenErr), xlog.FieldErr(err))
+	}
+	config.Port = listener.Addr().(*net.TCPAddr).Port
 	return &Server{
-		Echo:   echo.New(),
-		config: config,
+		Echo:     echo.New(),
+		config:   config,
+		listener: listener,
 	}
 }
 
@@ -44,9 +54,16 @@ func (s *Server) Serve() error {
 	s.Echo.HideBanner = true
 	s.Echo.StdLogger = xlog.JupiterLogger.StdLog()
 	for _, route := range s.Echo.Routes() {
-		s.config.logger.Info("echo add route", xlog.FieldMethod(route.Method), xlog.String("path", route.Path))
+		s.config.logger.Info("add route", xlog.FieldMethod(route.Method), xlog.String("path", route.Path))
 	}
-	return s.Echo.Start(s.config.Address())
+	s.Echo.Listener = s.listener
+	err := s.Echo.Start("")
+	if err != http.ErrServerClosed {
+		return err
+	}
+
+	s.config.logger.Info("close echo", xlog.FieldAddr(s.config.Address()))
+	return nil
 }
 
 // Stop implements server.Server interface

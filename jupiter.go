@@ -32,6 +32,7 @@ import (
 	"github.com/douyu/jupiter/pkg/flag"
 	"github.com/douyu/jupiter/pkg/govern"
 	"github.com/douyu/jupiter/pkg/registry"
+	"github.com/douyu/jupiter/pkg/sentinel"
 	"github.com/douyu/jupiter/pkg/server"
 	"github.com/douyu/jupiter/pkg/trace"
 	"github.com/douyu/jupiter/pkg/trace/jaeger"
@@ -89,6 +90,7 @@ func (app *Application) startup() (err error) {
 			app.initLogger,
 			app.initMaxProcs,
 			app.initTracer,
+			app.initSentinel,
 		)()
 	})
 	return
@@ -227,11 +229,17 @@ func (app *Application) beforeStop() {
 func (app *Application) startGovernor() (err error) {
 	app.logger.Info("start governor", xlog.FieldMod(ecode.ModApp), xlog.FieldAddr("http://"+app.governor.Addr))
 	defer func() {
-		if err != nil && err != http.ErrServerClosed {
-			app.logger.Panic("start governor", xlog.FieldMod(ecode.ModApp), xlog.FieldErr(err), xlog.FieldAddr("http://"+app.governor.Addr))
+		if err != nil {
+			app.logger.Panic("stop governor", xlog.FieldMod(ecode.ModApp), xlog.FieldErr(err), xlog.FieldAddr("http://"+app.governor.Addr))
 		}
 	}()
-	return app.governor.ListenAndServe()
+	err = app.governor.ListenAndServe()
+	if err == http.ErrServerClosed {
+		app.logger.Info("stop governor", xlog.FieldMod(ecode.ModApp), xlog.FieldAddr("http://"+app.governor.Addr))
+		return nil
+	}
+
+	return err
 }
 
 func (app *Application) startServers() error {
@@ -243,7 +251,7 @@ func (app *Application) startServers() error {
 		eg.Go(func() (err error) {
 			_ = app.registerer.RegisterService(context.TODO(), s.Info())
 			defer app.registerer.DeregisterService(context.TODO(), s.Info())
-			app.logger.Info("start servers", xlog.FieldMod(ecode.ModApp), xlog.FieldAddr(s.Info().Label()))
+			app.logger.Info("start servers", xlog.FieldMod(ecode.ModApp), xlog.FieldAddr(s.Info().Label()), xlog.Any("scheme", s.Info().Scheme))
 			defer app.logger.Info("exit server", xlog.FieldMod(ecode.ModApp), xlog.FieldErr(err), xlog.FieldAddr(s.Info().Label()))
 			return s.Serve()
 		})
@@ -298,8 +306,8 @@ func (app *Application) clean() {
 			xlog.Error("clean.defer", xlog.String("func", xstring.FunctionName(fn)))
 		}
 	}
-	xlog.DefaultLogger.Flush()
-	xlog.JupiterLogger.Flush()
+	_ = xlog.DefaultLogger.Flush()
+	_ = xlog.JupiterLogger.Flush()
 }
 
 func (app *Application) loadConfig() error {
@@ -348,9 +356,20 @@ func (app *Application) initLogger() error {
 }
 
 func (app *Application) initTracer() error {
+	// init tracing component jaeger
 	if conf.Get("jupiter.trace.jaeger") != nil {
 		var config = jaeger.RawConfig("jupiter.trace.jaeger")
 		trace.SetGlobalTracer(config.Build())
+	}
+	return nil
+}
+
+func (app *Application) initSentinel() error {
+	// init reliability component sentinel
+	if conf.Get("jupiter.reliability.sentinel") != nil {
+		app.logger.Info("init reliability component sentinel")
+		return sentinel.RawConfig("jupiter.reliability.sentinel").
+			InitSentinelCoreComponent()
 	}
 	return nil
 }

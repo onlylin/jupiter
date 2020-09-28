@@ -20,7 +20,7 @@ import (
 
 	"net"
 
-	"github.com/douyu/jupiter/pkg"
+	"github.com/douyu/jupiter/pkg/constant"
 	"github.com/douyu/jupiter/pkg/ecode"
 	"github.com/douyu/jupiter/pkg/server"
 	"github.com/douyu/jupiter/pkg/xlog"
@@ -41,6 +41,7 @@ func newServer(config *Config) *Server {
 		config.logger.Panic("new xgin server err", xlog.FieldErrKind(ecode.ErrKindListenErr), xlog.FieldErr(err))
 	}
 	config.Port = listener.Addr().(*net.TCPAddr).Port
+	gin.SetMode(config.Mode)
 	return &Server{
 		Engine:   gin.New(),
 		config:   config,
@@ -48,9 +49,15 @@ func newServer(config *Config) *Server {
 	}
 }
 
+//Upgrade protocol to WebSocket
+func (s *Server) Upgrade(ws *WebSocket) gin.IRoutes {
+	return s.GET(ws.Pattern, func(c *gin.Context) {
+		ws.Upgrade(c.Writer, c.Request)
+	})
+}
+
 // Serve implements server.Server interface.
 func (s *Server) Serve() error {
-	gin.SetMode(s.config.Mode)
 	// s.Gin.StdLogger = xlog.JupiterLogger.StdLog()
 	for _, route := range s.Engine.Routes() {
 		s.config.logger.Info("add route", xlog.FieldMethod(route.Method), xlog.String("path", route.Path))
@@ -81,19 +88,12 @@ func (s *Server) GracefulStop(ctx context.Context) error {
 }
 
 // Info returns server info, used by governor and consumer balancer
-// TODO(gorexlv): implements government protocol with juno
 func (s *Server) Info() *server.ServiceInfo {
-	return &server.ServiceInfo{
-		Name:      pkg.Name(),
-		Scheme:    "http",
-		IP:        s.config.Host,
-		Port:      s.config.Port,
-		Weight:    0.0,
-		Enable:    false,
-		Healthy:   false,
-		Metadata:  map[string]string{},
-		Region:    "",
-		Zone:      "",
-		GroupName: "",
-	}
+	info := server.ApplyOptions(
+		server.WithScheme("http"),
+		server.WithAddress(s.listener.Addr().String()),
+		server.WithKind(constant.ServiceProvider),
+	)
+	// info.Name = info.Name + "." + ModName
+	return &info
 }

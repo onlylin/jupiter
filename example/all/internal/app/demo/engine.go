@@ -61,7 +61,7 @@ func (eng *Engine) initSentinel() error {
 		MetricType: flow.QPS,
 		Count:      1,
 	})
-	return config.InitSentinelCoreComponent()
+	return config.Build()
 }
 
 func (eng *Engine) startJobs() error {
@@ -115,15 +115,5 @@ func (eng *Engine) serveGRPC() error {
 func (eng *Engine) execJob() error {
 	xlog.Info("exec job", xlog.String("info", "print info"))
 	xlog.Warn("exec job", xlog.String("warn", "print warning"))
-	return nil
-}
-
-func (eng *Engine) printLogs() error {
-	go func() {
-		for {
-			xlog.Info("hello", xlog.String("a", "b"))
-			time.Sleep(time.Second)
-		}
-	}()
 	return nil
 }
